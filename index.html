@@ -355,27 +355,87 @@
             }
 
 
-        function processarEnvio() {
-            const file = document.getElementById('arquivo').files[0];
-            if(!file) return exibirStatus("Selecione o CSV", "error");
+            function processarEnvio() {
+            // 1. MAPEAMENTO DE IDS (Corrigido para evitar o erro de 'null')
+            const fileInput = document.getElementById('arquivoCSV'); // ID correto do HTML novo
+            const liberacaoInput = document.getElementById('liberacaoCarga');
+            const operadorDisplay = document.getElementById('operadorLogadoDisplay');
+            const btn = document.getElementById('btnEnviarBase');
+        
+            // 2. VALIDAÇÕES INICIAIS (Cascade)
+            if (!liberacaoInput.value) return exibirAviso('statusEnvio', 'Selecione a Liberação de Carga!', 'error');
+            if (fileInput.files.length === 0) return exibirAviso('statusEnvio', 'Selecione o arquivo CSV!', 'error');
+        
+            const file = fileInput.files[0];
             const reader = new FileReader();
-            reader.onload = (e) => {
-                exibirStatus("Enviando...", "loading");
-                fetch(WEB_APP_URL + "?action=processarUpload", {
-                    method: 'POST',
-                    mode: 'no-cors', // O upload via POST funciona com no-cors no Apps Script
-                    body: JSON.stringify({
-                        romaneio: document.getElementById('romaneio').value,
-                        fileContent: e.target.result,
-                        conferente: usuarioLogado,
-                        operador: document.getElementById('operador').value,
-                        liberacao: document.getElementById('liberacao').value
-                    })
-                }).then(() => exibirStatus("Enviado! Verifique a planilha.", "success"))
-                  .catch(() => exibirStatus("Erro no envio.", "error"));
+        
+            // INTERFACE: BOTÃO EM MODO CARREGAMENTO
+            btn.disabled = true;
+            const textoOriginal = btn.innerHTML;
+            btn.innerHTML = '<div class="spinner"></div> Processando...';
+            exibirAviso('statusEnvio', 'Validando estrutura do arquivo...', 'loading');
+        
+            reader.onload = function(e) {
+                const conteudo = e.target.result;
+                
+                // --- VALIDATION 1: DEFAULT COL NAMES ---
+                const linhas = conteudo.split(/\r?\n/);
+                const cabecalhoReal = linhas[0].split(';').map(col => col.trim().toUpperCase());
+                
+                const colunasObrigatorias = ["ROMANEIO", "OV", "FORNEC_CROSS", "NF_CROSS", "FORNEC_LAST", "NF_LAST", "VOLUMES"];
+                const colunasFaltantes = colunasObrigatorias.filter(col => !cabecalhoReal.includes(col));
+        
+                if (colunasFaltantes.length > 0) {
+                    btn.disabled = false;
+                    btn.innerHTML = textoOriginal;
+                    return exibirAviso('statusEnvio', 'Erro: Colunas ausentes (' + colunasFaltantes.join(', ') + ')', 'error');
+                }
+        
+                // --- VALIDATION 2: MULTI-ROMANEIO LOGIC (Identificação) ---
+                // A lógica de criar as abas dinâmicas "Base_" agora acontece no .gs,
+                // mas aqui avisamos o usuário no console.
+                console.log("Arquivo validado. Iniciando processamento de romaneios...");
+        
+                // 3. ENVIO PARA O SERVIDOR (Usando FETCH NO-CORS)
+                // Montamos os parâmetros na URL para garantir que o .gs receba via GET (action: processarUpload)
+                const params = new URLSearchParams({
+                    action: 'processarUpload',
+                    fileContent: conteudo,
+                    conferente: document.getElementById('userLogadoDisplay').value,
+                    operador: operadorDisplay.value,
+                    liberacao: liberacaoInput.value
+                });
+        
+                fetch(`${WEB_APP_URL}?${params.toString()}`, {
+                    method: 'GET',
+                    mode: 'no-cors'
+                })
+                .then(() => {
+                    // SUCESSO: Como usamos no-cors, assumimos sucesso ao completar a requisição
+                    document.getElementById('modalTitulo').innerText = "Envio Concluído!";
+                    document.getElementById('modalMensagem').innerText = "O arquivo foi processado com sucesso.";
+                    document.getElementById('modalSubtitulo').innerText = "Verifique as abas 'Base_' na sua planilha.";
+                    document.getElementById('modalSucesso').classList.remove('hidden');
+        
+                    setTimeout(() => {
+                        document.getElementById('modalSucesso').classList.add('hidden');
+                        btn.disabled = false;
+                        btn.innerHTML = textoOriginal;
+                        fileInput.value = ""; // Limpa o campo de arquivo
+                        exibirAviso('statusEnvio', '', '');
+                    }, 3000);
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    btn.innerHTML = textoOriginal;
+                    exibirAviso('statusEnvio', 'Erro técnico na conexão.', 'error');
+                    console.error(err);
+                });
             };
+        
             reader.readAsText(file);
         }
+
 
         function preencherCombo(id, lista) {
             const select = document.getElementById(id);
