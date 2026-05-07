@@ -392,57 +392,60 @@
             }
 
 
-            function enviarParaServidor(conteudo, liberacao) {
-              const btn = document.getElementById('btnEnviarBase');
-              const statusEl = document.getElementById('statusEnvio');
+        function enviarParaServidor(conteudo, liberacao) {
+          const btn = document.getElementById('btnEnviarBase');
+          const statusEl = document.getElementById('statusEnvio');
+          
+          btn.disabled = true;
+          btn.innerHTML = '<div class="spinner"></div> Enviando Base...';
+          exibirAviso('statusEnvio', 'Processando dados no servidor...', 'loading');
+        
+          const payload = {
+            action: 'processarUpload',
+            liberacao: liberacao,
+            conferente: document.getElementById('userLogadoDisplay').value,
+            operador: document.getElementById('operadorLogadoDisplay').value,
+            fileContent: conteudo
+          };
+        
+          fetch(WEB_APP_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+          })
+          .then(response => response.json()) // Alterado para .json() para facilitar a leitura
+          .then(res => {
+            if (res.success) {
+              // MENSAGEM AMIGÁVEL DE SUCESSO
+              document.getElementById('modalTitulo').innerText = "Excelente!";
+              document.getElementById('modalMensagem').innerHTML = 
+                `<strong>O upload foi concluído!</strong><br><br>${res.message}`;
               
-              btn.disabled = true;
-              btn.innerHTML = '<div class="spinner"></div> Enviando Base...';
-              exibirAviso('statusEnvio', 'Processando arquivo e criando abas...', 'loading');
-            
-              const payload = {
-                action: 'processarUpload',
-                liberacao: liberacao,
-                conferente: document.getElementById('userLogadoDisplay').value,
-                operador: document.getElementById('operadorLogadoDisplay').value,
-                fileContent: conteudo
-              };
-            
-              // REMOVEMOS o 'no-cors' para conseguir ler a resposta do Apps Script
-              fetch(WEB_APP_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload)
-              })
-              .then(response => response.text()) // O Apps Script retorna texto no seu caso
-              .then(texto => {
-                // Se o texto começar com "Erro", tratamos como falha
-                if (texto.includes("Erro")) {
-                  btn.disabled = false;
-                  btn.innerHTML = 'Enviar Base';
-                  exibirAviso('statusEnvio', texto, 'error');
-                } else {
-                  // SUCESSO REAL: Mostra o Pop-up verde
-                  document.getElementById('modalTitulo').innerText = "Envio Concluído!";
-                  document.getElementById('modalMensagem').innerText = texto;
-                  document.getElementById('modalSucesso').classList.remove('hidden');
-                  
-                  setTimeout(() => {
-                    document.getElementById('modalSucesso').classList.add('hidden');
-                    btn.disabled = false;
-                    btn.innerHTML = 'Enviar Base';
-                    document.getElementById('arquivoCSV').value = ''; 
-                    exibirAviso('statusEnvio', '', ''); // Limpa aviso
-                  }, 3500);
-                }
-              })
-              .catch(err => {
+              document.getElementById('modalSucesso').classList.remove('hidden');
+              
+              // Reset do formulário após sucesso
+              setTimeout(() => {
+                document.getElementById('modalSucesso').classList.add('hidden');
                 btn.disabled = false;
                 btn.innerHTML = 'Enviar Base';
-                exibirAviso('statusEnvio', 'Falha na comunicação com o servidor.', 'error');
-                console.error(err);
-              });
+                document.getElementById('arquivoCSV').value = ''; 
+                exibirAviso('statusEnvio', '', ''); 
+              }, 4000);
+            } else {
+              // TRATAMENTO DE ERRO DE VALIDAÇÃO
+              btn.disabled = false;
+              btn.innerHTML = 'Enviar Base';
+              exibirAviso('statusEnvio', res.error || res.message, 'error');
             }
+          })
+          .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = 'Enviar Base';
+            exibirAviso('statusEnvio', 'Falha na comunicação: Verifique sua internet.', 'error');
+            console.error("Erro de conexão:", err);
+          });
+        }
+
 
         function preencherCombo(id, lista) {
             const select = document.getElementById(id);
